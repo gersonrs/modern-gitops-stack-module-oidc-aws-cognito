@@ -1,125 +1,21 @@
 = modern-gitops-stack-module-oidc-aws-cognito
 
-A https://modern-gitops-stack.io[Modern GitOps Stack] module to deploy and configure https://aws.amazon.com/cognito/[AWS Cognito] as an OIDC provider. 
-
-You can simply use this module to create an OIDC client to use throughout the Modern GitOps Stack applications or you can use it to entirely the needed resources for that OIDC client as well as a group and users with administrative access.
+A https://modern-gitops-stack.io[Modern GitOps Stack] module to deploy an OIDC integration backed by an AWS Cognito user pool, as an alternative to Keycloak.
 
 == Usage
 
-This module can be declared by adding the following block on your Terraform configuration:
+This module can be declared by adding the following block to your Terraform configuration:
 
 [source,terraform]
 ----
-module "oidc" {
+module "oidc-aws-cognito" {
   source = "git::https://github.com/GersonRS/modern-gitops-stack-module-oidc-aws-cognito.git?ref=<RELEASE>"
 
-  cluster_name = module.eks.cluster_name
-  base_domain  = module.eks.base_domain
-
-  cognito_user_pool_id     = resource.aws_oidc_pool.pool.id
-  cognito_user_pool_domain = resource.aws_cognito_user_pool_domain.pool_domain.domain
-}
-----
-
-The above declaration assumes that you have created a Cognito pool and domain yourself, which you can do manually or you can create the following resources in your Terraform code:
-
-[source,terraform]
-----
-resource "aws_cognito_user_pool" "pool" {
-  name = module.eks.cluster_name
-}
-
-resource "aws_cognito_user_pool_domain" "pool_domain" {
-  domain       = module.eks.cluster_name
-  user_pool_id = aws_cognito_user_pool.pool.id
-}
-----
-
-If you want this module to take charge of creating the Cognito pool and domain automatically, you simply need to activate the variable `create_pool`:
-
-[source,terraform]
-----
-module "oidc" {
-  source = "git::https://github.com/GersonRS/modern-gitops-stack-module-oidc-aws-cognito.git?ref=<RELEASE>"
-
-  cluster_name = module.eks.cluster_name
-  base_domain  = module.eks.base_domain
-
-  create_pool = true
-}
-----
-
-You can go even further and provide a map of users to the module and it will take care of creating an administrator group called `modern-gitops-stack-admin` with the users you specified. AWS Cognito will take the user's e-mail addresses to send a temporary password in clear text, so these addresses need to be valid. *For now, we devised this user creation in the code mainly as a way to bootstrap ephemeral clusters used for testing.* To do this, you need to populate the `user_map` variable with an object for each user:
-
-[source,terraform]
-----
-module "oidc" {
-  source = "git::https://github.com/GersonRS/modern-gitops-stack-module-oidc-aws-cognito.git?ref=<RELEASE>"
-
-  cluster_name = module.eks.cluster_name
-  base_domain  = module.eks.base_domain
-
-  create_pool = true
-
-  user_map = {
-    johndoe = {
-      username   = "johndoe"
-      first_name = "John"
-      last_name  = "Doe"
-      email      = "john.doe@example.com"
-    }
-    janedoe = {
-      username   = "janedoe"
-      first_name = "Jane"
-      last_name  = "Doe"
-      email      = "jane.doe@example.com"
-    }
-  }
-}
-----
-
-NOTE: Only the `username` and `e-mail` fields on each user are required. Besides, since the e-mail is a scope required by most of our apps, the e-mail is automatically set as verified when the users are created.
-
-IMPORTANT: All users will belong to the administrators group and will have high privileges in applications such as Argo CD.
-
-The module contains an output called `modern_gitops_stack_admins` where you can get a map containing every username and their respective e-mail.
-
-=== OIDC Configuration
-
-By default, the OIDC client is configured to allow returning to the canonical URLs of the default Modern GitOps Stack applications. You can however use the variable `callback_urls` if you want to add any other callback URLs for the OIDC client:
-
-[source,terraform]
-----
-module "oidc" {
-  source = "git::https://github.com/GersonRS/modern-gitops-stack-module-oidc-aws-cognito.git?ref=<RELEASE>"
-
-  cluster_name = module.eks.cluster_name
-  base_domain  = module.eks.base_domain
-
-  cognito_user_pool_id     = resource.aws_oidc_pool.pool.id
-  cognito_user_pool_domain = resource.aws_cognito_user_pool_domain.pool_domain.domain
-
-  callback_urls = [
-    "https://callback1.url/oauth/callback",
-    "https://callback2.url/login/generic_oauth",
-  ]
-}
-----
-
-The module provides and output called `oidc` containing the OIDC configuration that is to be passed on to other modules. This output is an object that outputs the content of `local.oidc`:
-
-[source, terraform]
-----
-locals {
-  oidc = {
-    issuer_url              = format("https://cognito-idp.%s.amazonaws.com/%s", data.aws_region.current.name, local.cognito_user_pool_id)
-    oauth_url               = format("https://%s.auth.%s.amazoncognito.com/oauth2/authorize", local.cognito_user_pool_domain, data.aws_region.current.name)
-    token_url               = format("https://%s.auth.%s.amazoncognito.com/oauth2/token", local.cognito_user_pool_domain, data.aws_region.current.name)
-    api_url                 = format("https://%s.auth.%s.amazoncognito.com/oauth2/userInfo", local.cognito_user_pool_domain, data.aws_region.current.name)
-    client_id               = resource.aws_cognito_user_pool_client.client.id
-    client_secret           = resource.aws_cognito_user_pool_client.client.client_secret
-    oauth2_proxy_extra_args = []
-  }
+  cluster_name   = local.cluster_name
+  base_domain    = local.base_domain
+  subdomain      = local.subdomain
+  cluster_issuer = local.cluster_issuer
+  app_autosync   = local.app_autosync
 }
 ----
 
